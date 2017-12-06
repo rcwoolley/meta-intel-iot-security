@@ -22,7 +22,7 @@ tos3exclude () {
 }
 
 
-if ( [ "$AWS_ACCESS_KEY" ] && [ "$AWS_SECRET_KEY" ] || [ -e $HOME/.s3cfg ] ) && [ "$AWS_BUCKET" ]; then
+if ( [ "$AWS_ACCESS_KEY" ] && [ "$AWS_SECRET_KEY" ] || [ -e $HOME/.aws/credentials ] ) && [ "$AWS_BUCKET" ] && [ "$AWS_BUCKETDIR" ]; then
     # State of sstate before cleaning. "tree" would give nicer output, but is
     # not available.
     if [ "$DEBUG_OUTPUT" ]; then
@@ -58,23 +58,22 @@ if ( [ "$AWS_ACCESS_KEY" ] && [ "$AWS_SECRET_KEY" ] || [ -e $HOME/.s3cfg ] ) && 
     # - we can choose when to run it and whether it overlaps with testing.
     # - we can throw away the .rvm directory and thus get more free space.
     # On the other hand, "deploy" could also be configured to copy to other storages.
-    if [ ! -e $HOME/.s3cfg ]; then
-        cat >$HOME/.s3cfg <<EOF
+    if [ ! -e $HOME/.aws/credentials ]; then
+        cat >$HOME/.aws/credentials <<EOF
 [default]
-access_key = $AWS_ACCESS_KEY
-secret_key = $AWS_SECRET_KEY
-use_https = False
+aws_access_key_id = $AWS_ACCESS_KEY
+aws_secret_access_key = $AWS_SECRET_KEY
 EOF
     fi
     # Not supported by all versions of s3cmd, need to check.
-    if s3cmd --help | grep -q -e --storage-class; then
-        S3_STORAGE_CLASS=--storage-class=REDUCED_REDUNDANCY
+    if aws s3 sync help | grep -q -e --storage-class; then
+        AWS_STORAGE_CLASS=--storage-class=REDUCED_REDUNDANCY
     fi
     # Careful with progress: it can make the log too large, causing
     # TravisCI to abort the job ("The log length has exceeded the
     # limit of 4 Megabytes (this usually means that test suite is
     # raising the same exception over and over).").
-    s3cmd $S3CMD_DRYRUN --no-progress --skip-existing --exclude-from=$S3EXCLUDE $S3_STORAGE_CLASS sync $SSTATE_CACHE/ s3://travis-meta-intel-iot-security/
+    aws s3 sync $SSTATE_CACHE/ s3://$AWS_BUCKET/$AWS_BUCKETDIR $AWSCLI_DRYRUN --no-progress --acl public-read --exclude "$(cat $S3EXCLUDE | xargs)" $AWS_STORAGE_CLASS
 else
     echo "Not updating sstate in S3 bucket (no credentials or bucket)."
 fi
